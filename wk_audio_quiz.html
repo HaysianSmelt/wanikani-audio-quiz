@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WaniKani Audio Quiz</title>
+<!-- Load data first so WK_DATA is defined before any JS runs -->
+<script src="wk_data.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f6f5f2;
+    --card: #ffffff;
+    --border: #e0ddd4;
+    --text: #2b2b2b;
+    --muted: #777;
+    --vocab-bg: #a845c8;
+    --kanji-bg: #e63a3a;
+    --correct: #2e7d32;
+    --correct-bg: #e8f5e9;
+    --wrong: #c62828;
+    --wrong-bg: #ffebee;
+    --accent: #6a4c93;
+    --btn-hover: #54397a;
+  }
+
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px 60px;
+  }
+
+  .screen { display: none; width: 100%; max-width: 600px; }
+  .screen.active { display: block; }
+
+  /* ── SETUP ── */
+  .setup-header { text-align: center; margin-bottom: 28px; }
+  .setup-header h1 { font-size: 1.8em; color: var(--accent); letter-spacing: 1px; }
+  .setup-header p { color: var(--muted); font-size: 0.9em; margin-top: 6px; }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin-bottom: 16px; }
+  .card h2 { font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 14px; }
+
+  .level-row { display: flex; align-items: center; gap: 10px; }
+  .level-row input { flex: 1; padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95em; background: #fafaf8; text-align: center; outline: none; }
+  .level-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(106,76,147,.15); }
+  .level-row span { color: var(--muted); white-space: nowrap; font-size: 0.9em; }
+
+  .checkgroup { display: flex; gap: 12px; flex-wrap: wrap; }
+  .checkgroup label { display: flex; align-items: center; gap: 7px; cursor: pointer; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border); background: #fafaf8; font-size: 0.93em; transition: all .15s; }
+  .checkgroup label:hover { border-color: var(--accent); }
+  .checkgroup label.checked { background: #f0ebf8; border-color: var(--accent); font-weight: 600; }
+  .checkgroup input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+
+  .pill-select { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill-btn { padding: 7px 16px; border-radius: 20px; border: 1.5px solid var(--border); background: #fafaf8; font-size: 0.88em; cursor: pointer; transition: all .15s; font-weight: 600; color: #555; }
+  .pill-btn.selected { background: var(--accent); border-color: var(--accent); color: white; }
+
+  .note { font-size: 0.8em; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+
+  .no-data-warn { background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 14px 18px; font-size: 0.88em; line-height: 1.6; margin-bottom: 16px; display: none; }
+  .no-data-warn strong { color: #b26a00; }
+
+  .btn { display: block; width: 100%; padding: 13px; border-radius: 8px; background: var(--accent); color: white; font-size: 1.05em; font-weight: 700; border: none; cursor: pointer; transition: background .15s; letter-spacing: .3px; }
+  .btn:hover { background: var(--btn-hover); }
+  .btn:disabled { background: #bbb; cursor: not-allowed; }
+  .btn.secondary { background: white; color: var(--accent); border: 1.5px solid var(--accent); }
+  .btn.secondary:hover { background: #f0ebf8; }
+  .btn.small { padding: 9px; font-size: 0.9em; }
+
+  .error-msg { color: var(--wrong); font-size: 0.88em; margin-top: 8px; padding: 8px 12px; background: var(--wrong-bg); border-radius: 6px; display: none; }
+
+  /* ── QUIZ ── */
+  .quiz-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; gap: 10px; }
+  .progress-wrap { flex: 1; }
+  .progress-track { background: var(--border); border-radius: 4px; height: 8px; }
+  .progress-fill { background: var(--accent); border-radius: 4px; height: 8px; transition: width .4s ease; }
+  .progress-label { font-size: 0.78em; color: var(--muted); margin-top: 4px; }
+  .score-display { font-size: 0.88em; font-weight: 700; white-space: nowrap; }
+  .score-c { color: var(--correct); }
+  .score-w { color: var(--wrong); }
+
+  .item-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 32px 24px; text-align: center; margin-bottom: 16px; }
+  .type-badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 0.75em; font-weight: 700; letter-spacing: .5px; color: white; margin-bottom: 14px; }
+  .type-badge.vocab  { background: var(--vocab-bg); }
+  .type-badge.kanji  { background: var(--kanji-bg); }
+  .item-char { font-size: 5em; line-height: 1.2; margin-bottom: 8px; font-family: 'Yu Gothic', 'Meiryo', 'Hiragino Kaku Gothic Pro', sans-serif; }
+  .item-meaning { font-size: 0.9em; color: var(--muted); min-height: 1.2em; }
+  .meaning-hidden { opacity: 0; pointer-events: none; }
+
+  .audio-btn { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 auto 16px; padding: 11px 28px; border-radius: 8px; background: #1a56cc; color: white; border: none; cursor: pointer; font-size: 0.95em; font-weight: 600; transition: background .15s; width: fit-content; }
+  .audio-btn:hover { background: #1240a0; }
+  .audio-btn.playing { background: #0d2d6b; }
+
+  .answer-area { margin-bottom: 12px; }
+  .answer-label { font-size: 0.83em; color: var(--muted); margin-bottom: 6px; }
+  .answer-input { width: 100%; padding: 12px 16px; border: 2px solid var(--border); border-radius: 8px; font-size: 1.3em; text-align: center; background: var(--card); color: var(--text); outline: none; font-family: 'Yu Gothic', 'Meiryo', sans-serif; transition: border-color .15s; }
+  .answer-input:focus { border-color: var(--accent); }
+  .answer-input.correct { border-color: var(--correct); background: var(--correct-bg); }
+  .answer-input.wrong   { border-color: var(--wrong);   background: var(--wrong-bg);   }
+
+  .feedback { padding: 14px 18px; border-radius: 8px; margin-bottom: 14px; display: none; font-size: 0.93em; line-height: 1.6; }
+  .feedback.correct { background: var(--correct-bg); border-left: 4px solid var(--correct); }
+  .feedback.wrong   { background: var(--wrong-bg);   border-left: 4px solid var(--wrong);   }
+  .fb-label { font-weight: 700; margin-bottom: 4px; }
+  .fb-label.c { color: var(--correct); }
+  .fb-label.w { color: var(--wrong); }
+  .fb-readings { margin-top: 4px; font-size: 0.9em; color: #444; }
+  .reading-item { margin-top: 3px; }
+  .reading-kana { font-family: 'Yu Gothic', 'Meiryo', sans-serif; font-size: 1.1em; font-weight: 600; }
+  .rtag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.72em; font-weight: 700; margin-right: 5px; vertical-align: middle; }
+  .rtag.onyomi  { background: #fff3e0; color: #bf360c; }
+  .rtag.kunyomi { background: #e8f5e9; color: #2e7d32; }
+  .rtag.nanori  { background: #e3f2fd; color: #1565c0; }
+
+  .quiz-actions { display: flex; gap: 10px; }
+  .quiz-actions .btn { margin-top: 0; }
+
+  /* ── RESULTS ── */
+  .results-header { text-align: center; padding: 20px 0 18px; }
+  .results-header h1 { font-size: 1.6em; color: var(--accent); }
+  .stars { font-size: 1.7em; margin: 8px 0; letter-spacing: 3px; }
+  .score-big { font-size: 3em; font-weight: 700; color: var(--accent); }
+  .score-pct { font-size: 1.05em; color: var(--muted); margin-top: 4px; }
+
+  .missed-item { display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--border); font-size: 0.92em; }
+  .missed-item:last-child { border-bottom: none; }
+  .missed-char { font-size: 1.6em; font-family: 'Yu Gothic', 'Meiryo', sans-serif; text-align: center; }
+  .missed-reading { font-family: 'Yu Gothic', 'Meiryo', sans-serif; font-weight: 600; }
+  .missed-meaning { font-size: 0.85em; color: var(--muted); }
+  .missed-badge { font-size: 0.72em; }
+
+  .step-pill { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 0.75em; font-weight: 700; letter-spacing: .5px; margin-left: 8px; vertical-align: middle; background: #e3f2fd; color: #1565c0; }
+
+  .results-actions { display: flex; gap: 10px; margin-top: 8px; }
+  .results-actions .btn { margin-top: 0; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════
+     SETUP
+════════════════════════════════════ -->
+<div id="screen-setup" class="screen active">
+  <div class="setup-header">
+    <h1>WK Audio Quiz</h1>
+    <p>Hear a word — type the reading in hiragana</p>
+  </div>
+
+  <div id="no-data-warn" class="no-data-warn">
+    <strong>⚠ Data not found.</strong> <code>wk_data.js</code> is missing from this folder.<br>
+    Run <code>python download_wk.py</code> first to download all WaniKani data and audio files.
+  </div>
+
+  <div class="card">
+    <h2>Levels</h2>
+    <div class="level-row">
+      <input type="number" id="level-min" value="1" min="1" max="60">
+      <span>through</span>
+      <input type="number" id="level-max" value="10" min="1" max="60">
+      <span>(1 – 60)</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Item Types</h2>
+    <div class="checkgroup">
+      <label id="lbl-vocab" class="checked">
+        <input type="checkbox" id="type-vocab" checked> Vocabulary
+      </label>
+      <label id="lbl-kanji">
+        <input type="checkbox" id="type-kanji"> Kanji
+      </label>
+    </div>
+    <p class="note">Vocabulary plays WaniKani's human voice recordings. Kanji uses browser speech synthesis (no audio files available for individual kanji).</p>
+  </div>
+
+  <div class="card">
+    <h2>Test Length</h2>
+    <div class="pill-select" id="length-picker">
+      <button class="pill-btn" data-val="10">10</button>
+      <button class="pill-btn selected" data-val="25">25</button>
+      <button class="pill-btn" data-val="50">50</button>
+      <button class="pill-btn" data-val="100">100</button>
+      <button class="pill-btn" data-val="all">All</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Voice (Vocabulary)</h2>
+    <div class="pill-select" id="voice-picker">
+      <button class="pill-btn selected" data-val="f">Female (Kyoko)</button>
+      <button class="pill-btn" data-val="m">Male (Kenichi)</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Quiz Type</h2>
+    <div class="pill-select" id="quiz-picker">
+      <button class="pill-btn selected" data-val="reading">Reading</button>
+      <button class="pill-btn" data-val="meaning">Meaning</button>
+      <button class="pill-btn" data-val="both">Both</button>
+    </div>
+    <p class="note">Reading: hear audio → type hiragana. &nbsp;Meaning: see character → type English. &nbsp;Both: tests each item twice (doubles test length).</p>
+  </div>
+
+  <div id="start-error" class="error-msg"></div>
+  <button class="btn" id="btn-start">Start Quiz</button>
+</div>
+
+
+<!-- ═══════════════════════════════════
+     QUIZ
+════════════════════════════════════ -->
+<div id="screen-quiz" class="screen">
+  <div class="quiz-header">
+    <div class="progress-wrap">
+      <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      <div class="progress-label" id="progress-label">0 / 0</div>
+    </div>
+    <div class="score-display">
+      <span class="score-c" id="score-c">0✓</span>&nbsp;
+      <span class="score-w" id="score-w">0✗</span>
+    </div>
+    <button class="btn secondary small" id="btn-quit" style="white-space:nowrap;padding:7px 14px;width:auto;">⌂ Home</button>
+  </div>
+
+  <div class="item-card">
+    <div><span class="type-badge" id="item-badge">vocab</span>
+         <span class="step-pill" id="step-pill" style="display:none;"></span></div>
+    <div class="item-char" id="item-char">—</div>
+    <div class="item-meaning meaning-hidden" id="item-meaning"></div>
+  </div>
+
+  <button class="audio-btn" id="btn-audio">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+    </svg>
+    Play Reading
+  </button>
+
+  <div class="answer-area">
+    <div class="answer-label" id="answer-label">Type the reading in hiragana (Japanese IME)</div>
+    <input class="answer-input" id="answer-input" type="text"
+           placeholder="ひらがな…" autocomplete="off" autocorrect="off" spellcheck="false">
+  </div>
+
+  <div class="feedback" id="feedback"></div>
+
+  <div class="quiz-actions">
+    <button class="btn" id="btn-check">Check</button>
+    <button class="btn secondary" id="btn-next" style="display:none;">Next →</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════
+     RESULTS
+════════════════════════════════════ -->
+<div id="screen-results" class="screen">
+  <div class="results-header">
+    <h1>Test Complete</h1>
+    <div class="stars" id="res-stars">★★★★★</div>
+    <div class="score-big" id="res-score">—</div>
+    <div class="score-pct" id="res-pct"></div>
+  </div>
+
+  <div class="card" id="missed-card" style="display:none;">
+    <h2>Missed Items</h2>
+    <div id="missed-list"></div>
+  </div>
+
+  <div class="results-actions">
+    <button class="btn" id="btn-retry" style="display:none;">Retry Missed Items</button>
+    <button class="btn secondary" id="btn-new">New Test</button>
+  </div>
+</div>
+
+
+<script>
+// ══════════════════════════════════════════════
+// Romaji → Hiragana converter
+// ══════════════════════════════════════════════
+const ROMAJI_MAP = (() => {
+  const m = {};
+  const V = ['a','i','u','e','o'];
+  const C = {
+    k:'か き く け こ', g:'が ぎ ぐ げ ご',
+    s:'さ し す せ そ', z:'ざ じ ず ぜ ぞ',
+    t:'た ち つ て と', d:'だ ぢ づ で ど',
+    n:'な に ぬ ね の', h:'は ひ ふ へ ほ',
+    b:'ば び ぶ べ ぼ', p:'ぱ ぴ ぷ ぺ ぽ',
+    m:'ま み む め も', y:'や  ゆ  よ',
+    r:'ら り る れ ろ', w:'わ ゐ  ゑ を',
+    f:'ふぁ ふぃ ふ ふぇ ふぉ',
+    v:'ヴぁ ヴぃ ヴ ヴぇ ヴぉ',
+  };
+  // Basic CV combos
+  for (const [c, kana] of Object.entries(C)) {
+    kana.split(' ').forEach((k, i) => { if (k) m[c + V[i]] = k; });
+  }
+  // Digraphs: sh, ch, ts, j
+  'sha し shu しゅ sho しょ shi し'.split(' ').forEach((v,i,a)=>{ if(i%2===0) m[v]=a[i+1]; });
+  'cha ちゃ chi ち chu ちゅ che ちぇ cho ちょ'.split(' ').forEach((v,i,a)=>{ if(i%2===0) m[v]=a[i+1]; });
+  'tsa つぁ tsi つぃ tsu つ tse つぇ tso つぉ'.split(' ').forEach((v,i,a)=>{ if(i%2===0) m[v]=a[i+1]; });
+  'ja じゃ ji じ ju じゅ je じぇ jo じょ'.split(' ').forEach((v,i,a)=>{ if(i%2===0) m[v]=a[i+1]; });
+  'dya ぢゃ dyi ぢ dyu ぢゅ dye ぢぇ dyo ぢょ'.split(' ').forEach((v,i,a)=>{ if(i%2===0) m[v]=a[i+1]; });
+  // Small kana combos
+  'kya きゃ kyi きぃ kyu きゅ kye きぇ kyo きょ'.split(' ').forEach((v,i,a)=>{ if(i%2===0) m[v]=a[i+1]; });
+  'gya ぎゃ gyu ぎゅ gyo ぎょ'.split(' ').forEach((v,i,a)=>{ if(i%2===0) m[v]=a[i+1]; });
+  'nya にゃ nyu にゅ nyo にょ'.split(' ').forEach((v,i,a)=>{ if(i%2===0) m[v]=a[i+1]; });
+  'hya ひゃ hyu ひゅ hyo ひょ'.split(' ').forEach((v,i,a)=>{ if(i%2===0) m[v]=a[i+1]; });
+  'bya びゃ byu びゅ byo びょ'.split(' ').forEach((v,i,a)=>{ if(i%2===0) m[v]=a[i+1]; });
+  'pya ぴゃ pyu ぴゅ pyo ぴょ'.split(' ').forEach((v,i,a)=>{ if(i%2===0) m[v]=a[i+1]; });
+  'mya みゃ myu みゅ myo みょ'.split(' ').forEach((v,i,a)=>{ if(i%2===0) m[v]=a[i+1]; });
+  'rya りゃ ryu りゅ ryo りょ'.split(' ').forEach((v,i,a)=>{ if(i%2===0) m[v]=a[i+1]; });
+  'tya ちゃ tyu ちゅ tyo ちょ'.split(' ').forEach((v,i,a)=>{ if(i%2===0) m[v]=a[i+1]; });
+  // Vowels alone
+  m['a']='あ'; m['i']='い'; m['u']='う'; m['e']='え'; m['o']='お';
+  // n
+  m['nn']='ん'; m["n'"]='ん';
+  // Small kana via x prefix (xa=ぁ, xtu/xtsu=っ, xya=ゃ, etc.)
+  m['xa']='ぁ'; m['xi']='ぃ'; m['xu']='ぅ'; m['xe']='ぇ'; m['xo']='ぉ';
+  m['xya']='ゃ'; m['xyu']='ゅ'; m['xyo']='ょ';
+  m['xtsu']='っ'; m['xtu']='っ'; m['xwa']='ゎ';
+  return m;
+})();
+
+// Sort keys longest-first so greedy matching works
+const ROMAJI_KEYS = Object.keys(ROMAJI_MAP).sort((a,b) => b.length - a.length);
+
+function romajiToHiragana(str) {
+  let out = '';
+  let s = str.toLowerCase();
+  let i = 0;
+  while (i < s.length) {
+    // っ from doubled consonant (e.g. kk, tt, ss…) — not nn
+    if (s[i] === s[i+1] && s[i] !== 'n' && /[a-z]/.test(s[i])) {
+      out += 'っ';
+      i++;
+      continue;
+    }
+    // n before consonant (not n, a, i, u, e, o, y) → ん
+    if (s[i] === 'n' && i+1 < s.length && !/[aiueony]/.test(s[i+1])) {
+      out += 'ん';
+      i++;
+      continue;
+    }
+    // Greedy match
+    let matched = false;
+    for (const key of ROMAJI_KEYS) {
+      if (s.startsWith(key, i)) {
+        out += ROMAJI_MAP[key];
+        i += key.length;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) { out += s[i]; i++; }
+  }
+  return out;
+}
+
+// ══════════════════════════════════════════════
+// Data check — runs after all scripts load
+// ══════════════════════════════════════════════
+window.addEventListener('load', () => {
+  if (typeof WK_DATA === 'undefined') {
+    document.getElementById('no-data-warn').style.display = 'block';
+    document.getElementById('btn-start').disabled = true;
+  }
+});
+
+// ══════════════════════════════════════════════
+// State
+// ══════════════════════════════════════════════
+const state = {
+  voice:     'f',
+  length:    25,
+  quizType:  'reading',
+  queue:     [],
+  index:     0,
+  step:      0,   // 0 = reading, 1 = meaning (only used in 'both' mode)
+  score:     { correct: 0, wrong: 0, missed: [] },
+  answered:  false,
+  audio:     null,
+  loadedAt:  0,   // timestamp of last loadItem() — guards against stray Enter presses
+};
+
+// ══════════════════════════════════════════════
+// Helpers
+// ══════════════════════════════════════════════
+const $  = id => document.getElementById(id);
+const screens = ['setup', 'quiz', 'results'];
+
+function show(name) {
+  screens.forEach(s => $('screen-' + s).classList.remove('active'));
+  $('screen-' + name).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ══════════════════════════════════════════════
+// Setup UI
+// ══════════════════════════════════════════════
+
+// Restore settings
+const saved = JSON.parse(localStorage.getItem('wkq_settings') || '{}');
+if (saved.levelMin) $('level-min').value = saved.levelMin;
+if (saved.levelMax) $('level-max').value = saved.levelMax;
+
+// Checkbox styling
+['vocab', 'kanji'].forEach(t => {
+  $('type-' + t).addEventListener('change', () =>
+    $('lbl-' + t).classList.toggle('checked', $('type-' + t).checked));
+});
+
+// Pill pickers
+function setupPills(wrapperId, key) {
+  const wrap = $(wrapperId);
+  wrap.querySelectorAll('.pill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      wrap.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      state[key] = btn.dataset.val;
+    });
+  });
+}
+setupPills('length-picker', 'length');
+setupPills('voice-picker',  'voice');
+setupPills('quiz-picker',   'quizType');
+
+// ══════════════════════════════════════════════
+// Start
+// ══════════════════════════════════════════════
+$('btn-start').addEventListener('click', () => {
+  const lmin = parseInt($('level-min').value);
+  const lmax = parseInt($('level-max').value);
+  const wantV = $('type-vocab').checked;
+  const wantK = $('type-kanji').checked;
+  const err   = $('start-error');
+  err.style.display = 'none';
+
+  if (!wantV && !wantK) return showErr('Select at least one item type.');
+  if (lmin < 1 || lmax > 60 || lmin > lmax) return showErr('Level range must be 1–60 with min ≤ max.');
+
+  const types = [];
+  if (wantV) types.push('vocabulary');
+  if (wantK) types.push('kanji');
+
+  // Filter WK_DATA
+  const pool = WK_DATA.filter(item =>
+    item.level >= lmin && item.level <= lmax && types.includes(item.obj)
+  );
+
+  if (!pool.length) return showErr(`No items found for levels ${lmin}–${lmax} with selected types.`);
+
+  localStorage.setItem('wkq_settings', JSON.stringify({ levelMin: lmin, levelMax: lmax }));
+
+  const shuffled = shuffle(pool.map(item => ({ ...item })));
+  const cap      = state.length === 'all' ? shuffled.length : parseInt(state.length);
+  state.queue    = shuffled.slice(0, cap);
+  state.index    = 0;
+  state.step     = 0;
+  state.score    = { correct: 0, wrong: 0, missed: [] };
+  state.answered = false;
+
+  show('quiz');
+  loadItem();
+});
+
+function showErr(msg) {
+  const el = $('start-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ══════════════════════════════════════════════
+// Quiz
+// ══════════════════════════════════════════════
+function isMeaningStep() {
+  return state.quizType === 'meaning' ||
+        (state.quizType === 'both' && state.step === 1);
+}
+
+function loadItem() {
+  if (state.index >= state.queue.length) { showResults(); return; }
+
+  state.answered = false;
+  state.loadedAt = Date.now();
+  const item = state.queue[state.index];
+
+  // Progress bar — in Both mode count questions (2 per item), not items
+  let pct, progressLabel;
+  if (state.quizType === 'both') {
+    const qNum   = state.index * 2 + state.step;
+    const qTotal = state.queue.length * 2;
+    pct           = (qNum / qTotal) * 100;
+    progressLabel = `${qNum + 1} of ${qTotal} · ${state.step === 0 ? 'reading' : 'meaning'}`;
+  } else {
+    pct           = (state.index / state.queue.length) * 100;
+    progressLabel = `${state.index + 1} of ${state.queue.length}`;
+  }
+  $('progress-fill').style.width = pct + '%';
+  $('progress-label').textContent = progressLabel;
+  $('score-c').textContent = state.score.correct + '✓';
+  $('score-w').textContent = state.score.wrong   + '✗';
+
+  // Item display
+  const isVocab   = item.obj === 'vocabulary';
+  const isMeaning = isMeaningStep();
+  $('item-badge').textContent = isVocab ? 'vocabulary' : 'kanji';
+  $('item-badge').className   = 'type-badge ' + (isVocab ? 'vocab' : 'kanji');
+  $('item-char').textContent  = item.char;
+  $('item-meaning').textContent = item.meanings.join(', ');
+  $('item-meaning').classList.add('meaning-hidden');
+
+  // Step pill — only visible in Both mode
+  if (state.quizType === 'both') {
+    $('step-pill').textContent = state.step === 0 ? '1 · reading' : '2 · meaning';
+    $('step-pill').style.display = '';
+  } else {
+    $('step-pill').style.display = 'none';
+  }
+
+  // Mode-specific prompt
+  if (isMeaning) {
+    $('answer-label').textContent = 'Type the meaning in English';
+    $('answer-input').placeholder = 'e.g. person, to run…';
+    $('btn-audio').style.display  = 'inline-flex'; // available but not auto-played
+  } else {
+    $('answer-label').textContent = 'Type the reading (hiragana or romaji)';
+    $('answer-input').placeholder = 'ひらがな or romaji…';
+    $('btn-audio').style.display  = 'inline-flex';
+  }
+
+  // Reset inputs
+  const inp = $('answer-input');
+  inp.value     = '';
+  inp.className = 'answer-input';
+  inp.disabled  = false;
+
+  $('feedback').style.display = 'none';
+  $('feedback').className     = 'feedback';
+  $('btn-check').style.display = '';
+  $('btn-next').style.display  = 'none';
+  $('btn-audio').classList.remove('playing');
+
+  inp.focus();
+  // Auto-play audio for reading mode; meaning mode let them choose
+  if (!isMeaning) setTimeout(() => playAudio(item), 300);
+}
+
+// ── Audio ──
+function playAudio(item) {
+  $('btn-audio').classList.add('playing');
+
+  // Stop previous
+  if (state.audio) { state.audio.pause(); state.audio = null; }
+  speechSynthesis.cancel();
+
+  if (item.obj === 'vocabulary' && item.audio[state.voice]) {
+    const a = new Audio(item.audio[state.voice]);
+    a.onended = () => $('btn-audio').classList.remove('playing');
+    a.onerror = () => tts(primaryReading(item));
+    state.audio = a;
+    a.play().catch(() => tts(primaryReading(item)));
+  } else {
+    tts(primaryReading(item));
+  }
+}
+
+function primaryReading(item) {
+  const r = item.readings.find(r => r.primary) || item.readings[0];
+  return r ? r.r : item.char;
+}
+
+function tts(text) {
+  if (!('speechSynthesis' in window)) { $('btn-audio').classList.remove('playing'); return; }
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'ja-JP';
+  u.rate = 0.85;
+  const voices = speechSynthesis.getVoices();
+  const jp = voices.find(v => v.lang === 'ja-JP') || voices.find(v => v.lang.startsWith('ja'));
+  if (jp) u.voice = jp;
+  u.onend = () => $('btn-audio').classList.remove('playing');
+  speechSynthesis.speak(u);
+}
+
+if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+
+$('btn-audio').addEventListener('click', () => {
+  const item = state.queue[state.index];
+  if (item) playAudio(item);
+});
+
+// ── Check answer ──
+function checkAnswer() {
+  if (state.answered) return;
+  state.answered = true;
+
+  const item      = state.queue[state.index];
+  const input     = $('answer-input').value.trim();
+  const isMeaning = isMeaningStep();
+  let ok;
+
+  if (isMeaning) {
+    // Case-insensitive match against any accepted meaning
+    const needle = input.toLowerCase();
+    ok = item.meanings.some(m => m.toLowerCase() === needle);
+  } else {
+    // Exact hiragana match
+    const valid = item.readings.filter(r => r.ok !== false).map(r => r.r);
+    ok = valid.includes(input);
+  }
+
+  $('answer-input').disabled  = true;
+  $('answer-input').className = 'answer-input ' + (ok ? 'correct' : 'wrong');
+  // In Both mode reading step, keep meaning hidden so it doesn't spoil the upcoming meaning question
+  if (!(state.quizType === 'both' && state.step === 0)) {
+    $('item-meaning').classList.remove('meaning-hidden');
+  }
+
+  const fb = $('feedback');
+  fb.style.display = 'block';
+  fb.className = 'feedback ' + (ok ? 'correct' : 'wrong');
+
+  if (ok) {
+    state.score.correct++;
+    if (isMeaning) {
+      // Bonus: show the reading too
+      fb.innerHTML = `<div class="fb-label c">✓ Correct!</div>
+        <div class="fb-readings" style="margin-top:4px;font-size:0.88em;color:#555;">Reading: ${buildReadingsHtml(item)}</div>`;
+    } else {
+      fb.innerHTML = `<div class="fb-label c">✓ Correct!</div>`;
+    }
+  } else {
+    state.score.wrong++;
+    state.score.missed.push({ ...item, missedMode: isMeaning ? 'meaning' : 'reading' });
+
+    const wrongNote = input
+      ? `— you wrote <em>${escHtml(input)}</em>`
+      : '';
+
+    if (isMeaning) {
+      fb.innerHTML = `
+        <div class="fb-label w">✗ Not quite ${wrongNote}</div>
+        <div class="fb-readings">Meaning: <strong>${item.meanings.join(' / ')}</strong></div>
+        <div class="fb-readings" style="margin-top:4px;">${buildReadingsHtml(item)}</div>`;
+    } else {
+      fb.innerHTML = `
+        <div class="fb-label w">✗ Not quite ${wrongNote}</div>
+        <div class="fb-readings">${buildReadingsHtml(item)}</div>`;
+    }
+  }
+
+  $('btn-check').style.display = 'none';
+  $('btn-next').style.display  = '';
+  $('btn-next').textContent    = (state.quizType === 'both' && state.step === 0)
+    ? 'Next: meaning →' : 'Next →';
+  $('btn-next').focus();
+}
+
+function buildReadingsHtml(item) {
+  const primary = item.readings.filter(r => r.primary || r.ok !== false);
+  return primary.map(r => {
+    const tag = r.type
+      ? `<span class="rtag ${r.type}">${r.type === 'onyomi' ? 'on' : r.type === 'kunyomi' ? 'kun' : r.type}</span>`
+      : '';
+    return `<div class="reading-item">${tag}<span class="reading-kana">${r.r}</span></div>`;
+  }).join('');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Events ──
+function advance() {
+  if (state.quizType === 'both' && state.step === 0) {
+    state.step = 1;  // same item, meaning step
+  } else {
+    state.step = 0;
+    state.index++;
+  }
+  loadItem();
+}
+
+$('btn-check').addEventListener('click', checkAnswer);
+$('btn-next').addEventListener('click',  advance);
+// Romaji → hiragana live conversion (reading mode only)
+$('answer-input').addEventListener('input', () => {
+  if (isMeaningStep()) return;          // leave meaning input alone
+  const inp = $('answer-input');
+  const pos      = inp.selectionStart;
+  const original = inp.value;
+  const converted = romajiToHiragana(original);
+  if (converted !== original) {
+    inp.value = converted;
+    const newPos = Math.max(0, pos + (converted.length - original.length));
+    inp.setSelectionRange(newPos, newPos);
+  }
+});
+
+// Check on keydown (fast response); advance on keyup (requires key release, prevents stray presses)
+$('answer-input').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (Date.now() - state.loadedAt < 200) return; // ignore stray Enter right after item loads
+  if (!state.answered) checkAnswer();
+});
+$('answer-input').addEventListener('keyup', e => {
+  if (e.key !== 'Enter') return;
+  if (state.answered) advance();
+});
+
+// ══════════════════════════════════════════════
+// Results
+// ══════════════════════════════════════════════
+function showResults() {
+  show('results');
+  // Both mode tests each item twice, so total questions = items × 2
+  const total   = state.queue.length * (state.quizType === 'both' ? 2 : 1);
+  const correct = state.score.correct;
+  const pct     = total ? Math.round(correct / total * 100) : 0;
+  const stars   = pct >= 90 ? 5 : pct >= 75 ? 4 : pct >= 55 ? 3 : pct >= 35 ? 2 : 1;
+
+  $('res-score').textContent = `${correct} / ${total}`;
+  $('res-pct').textContent   = `${pct}% correct`;
+  $('res-stars').textContent = '★'.repeat(stars) + '☆'.repeat(5 - stars);
+
+  const missed = state.score.missed;
+  if (missed.length) {
+    $('missed-card').style.display  = '';
+    $('btn-retry').style.display    = '';
+    $('missed-list').innerHTML = missed.map(item => {
+      const pread   = primaryReading(item);
+      const pmean   = item.meanings[0] || '—';
+      const isV     = item.obj === 'vocabulary';
+      const modeTag = item.missedMode === 'meaning'
+        ? `<span class="rtag" style="background:#fce4ec;color:#880e4f;">meaning</span>`
+        : `<span class="rtag" style="background:#ede7f6;color:#4527a0;">reading</span>`;
+      return `<div class="missed-item">
+        <div class="missed-char">${item.char}</div>
+        <div>
+          <div class="missed-reading">${pread} ${modeTag}</div>
+          <div class="missed-meaning">${pmean}</div>
+        </div>
+        <div><span class="type-badge missed-badge ${isV ? 'vocab' : 'kanji'}">${isV ? 'vocab' : 'kanji'}</span></div>
+      </div>`;
+    }).join('');
+  } else {
+    $('missed-card').style.display = 'none';
+    $('btn-retry').style.display   = 'none';
+  }
+}
+
+$('btn-retry').addEventListener('click', () => {
+  if (!state.score.missed.length) return;
+  state.queue    = shuffle([...state.score.missed]);
+  state.index    = 0;
+  state.score    = { correct: 0, wrong: 0, missed: [] };
+  state.answered = false;
+  show('quiz');
+  loadItem();
+});
+
+$('btn-new').addEventListener('click',  () => show('setup'));
+$('btn-quit').addEventListener('click', () => show('setup'));
+</script>
+
+</body>
+</html>
