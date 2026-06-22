@@ -2,8 +2,10 @@
 
 A free, offline quiz app that lets you practice WaniKani vocabulary and kanji using the **real human voice recordings** from WaniKani — Kyoko (female) and Kenichi (male). Works on desktop and Android/iPhone with no internet connection required after setup.
 
-![Desktop screenshot](screenshots/desktop.png)
-![Mobile screenshot](screenshots/mobile.png)
+![Desktop screenshot](PC_Screenshot.png)
+
+**Video demos:**
+[Desktop walkthrough](PC_Video.mp4) · [Android in action](Android_Test.MOV)
 
 ---
 
